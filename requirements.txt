@@ -2,6 +2,8 @@
 # Python 3.11 required (see runtime.txt)
 
 # ── Audio / Video acquisition ─────────────────────────────────────────────────
+# audioop-lts restores the `audioop` module removed in Python 3.13+ (needed by pydub)
+audioop-lts>=0.2.1
 yt-dlp>=2024.4.9
 pydub>=0.25.1
 ffmpeg-python>=0.2.0
