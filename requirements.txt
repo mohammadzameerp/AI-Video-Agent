@@ -1,5 +1,4 @@
 # ── AI Video Assistant ── requirements.txt ────────────────────────────────────
-# Python 3.11 required (see runtime.txt)
 
 # ── Audio / Video acquisition ─────────────────────────────────────────────────
 # audioop-lts restores the `audioop` module removed in Python 3.13+ (needed by pydub)
@@ -8,15 +7,10 @@ yt-dlp>=2024.4.9
 pydub>=0.25.1
 ffmpeg-python>=0.2.0
 
-# ── Speech-to-Text (local Whisper) ────────────────────────────────────────────
-# Pin numba/llvmlite to Python 3.11-compatible versions explicitly
-# to prevent openai-whisper from pulling llvmlite==0.36.0 (Python <3.10 only)
-llvmlite>=0.39.0
-numba>=0.56.0
-openai-whisper>=20231117
-torch>=2.2.0
-torchaudio>=2.2.0
-torchvision>=0.17.0
+# ── Speech-to-Text ────────────────────────────────────────────────────────────
+# faster-whisper: no numba/llvmlite dependency, works on Python 3.13/3.14,
+# runs efficiently on CPU with int8 quantization (4x faster than openai-whisper)
+faster-whisper>=1.0.0
 
 # ── Translation ────────────────────────────────────────────────────────────────
 deep-translator>=1.11.4
