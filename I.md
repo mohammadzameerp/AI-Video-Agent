@@ -1,4 +1,4 @@
-# AI Video Assistant: Comprehensive Interview Preparation Guide
+
 
 This guide is structured to help you explain this project and perform exceptionally in technical interviews. It covers the project architecture, workflow, build process, implementation details, design trade-offs, and an extensive list of interview Q&As categorized by domain.
 
