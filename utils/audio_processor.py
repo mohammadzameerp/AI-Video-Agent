@@ -14,74 +14,108 @@ from pydub import AudioSegment
 DOWNLOAD_DIR = "downloades"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# Detect whether the app is running on Streamlit Cloud (Linux /mount/src path)
+IS_CLOUD = os.path.exists("/mount/src")
 
-# ── YouTube Transcript (primary path for YouTube URLs) ─────────────────────────
+
+# ── YouTube Transcript (primary path for all YouTube URLs) ─────────────────────
 
 def _extract_video_id(url: str) -> str | None:
     """Extract the YouTube video ID from any YouTube URL format."""
-    patterns = [
-        r"(?:v=|youtu\.be/|shorts/|embed/|live/)([A-Za-z0-9_-]{11})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
+    match = re.search(r"(?:v=|youtu\.be/|shorts/|embed/|live/)([A-Za-z0-9_-]{11})", url)
+    return match.group(1) if match else None
 
 
-def fetch_youtube_transcript(url: str) -> str | None:
+def fetch_youtube_transcript(url: str) -> str:
     """
     Fetch transcript directly from YouTube's caption API.
-    This works from any IP (including cloud datacenter IPs) and requires
-    no audio download, no FFmpeg, and no Whisper inference.
-    Returns the transcript text, or None if captions are unavailable.
+    Works from cloud datacenter IPs — no audio download required.
+    Raises a user-friendly RuntimeError if captions are unavailable.
     """
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        video_id = _extract_video_id(url)
-        if not video_id:
-            return None
+        from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+    except ImportError:
+        raise RuntimeError("youtube-transcript-api is not installed. Add it to requirements.txt.")
 
-        # Prefer manually-written English captions, fall back to auto-generated
+    video_id = _extract_video_id(url)
+    if not video_id:
+        raise RuntimeError(f"Could not extract a valid YouTube video ID from URL: {url}")
+
+    try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+    except TranscriptsDisabled:
+        raise RuntimeError(
+            "❌ This video has transcripts/captions **disabled** by the creator.\n\n"
+            "**What to do:**\n"
+            "- Try a different YouTube video that has auto-generated captions.\n"
+            "- Or download the video to your device and upload the file directly."
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"❌ Could not fetch transcript for this video: {e}\n\n"
+            "**What to do:**\n"
+            "- Check that the YouTube URL is correct and the video is publicly accessible.\n"
+            "- Try a video with auto-generated captions (most YouTube videos have these).\n"
+            "- Or upload the video file directly."
+        )
 
-        transcript = None
+    # Try manually-created English captions first, then auto-generated, then translate
+    transcript = None
+    try:
+        transcript = transcript_list.find_manually_created_transcript(["en"])
+    except Exception:
+        pass
+
+    if transcript is None:
         try:
-            transcript = transcript_list.find_manually_created_transcript(["en"])
+            transcript = transcript_list.find_generated_transcript(["en"])
         except Exception:
             pass
 
-        if transcript is None:
-            try:
-                transcript = transcript_list.find_generated_transcript(["en"])
-            except Exception:
-                pass
+    if transcript is None:
+        try:
+            # Any language → translate to English
+            available = list(transcript_list)
+            if available:
+                transcript = available[0].translate("en")
+        except Exception:
+            pass
 
-        if transcript is None:
-            # Try any available transcript and translate it to English
-            try:
-                transcript = transcript_list.find_generated_transcript(
-                    [t.language_code for t in transcript_list]
-                ).translate("en")
-            except Exception:
-                return None
+    if transcript is None:
+        raise RuntimeError(
+            "❌ No captions found for this video in any language.\n\n"
+            "**What to do:**\n"
+            "- YouTube Shorts and some videos do not have auto-generated captions.\n"
+            "- Try a longer YouTube video (5+ minutes) which usually has captions.\n"
+            "- Or download the video to your device and upload the file directly."
+        )
 
-        entries = transcript.fetch()
-        text = " ".join(entry["text"] for entry in entries)
-        print(f"✅ YouTube transcript fetched directly ({len(text)} characters).")
-        return text
+    entries = transcript.fetch()
+    # Handle both dict-style and object-style entries across API versions
+    parts = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            parts.append(entry.get("text", ""))
+        else:
+            parts.append(getattr(entry, "text", str(entry)))
 
-    except Exception as e:
-        print(f"⚠️ YouTube transcript API failed ({e}). Will try audio download.")
-        return None
+    text = " ".join(p for p in parts if p.strip())
+    if not text.strip():
+        raise RuntimeError(
+            "❌ The captions for this video appear to be empty.\n\n"
+            "Please try a different video or upload the file directly."
+        )
+
+    print(f"✅ YouTube transcript fetched ({len(text)} characters).")
+    return text
 
 
-# ── YouTube Audio Download (fallback for videos without captions) ──────────────
+# ── YouTube Audio Download (local-only fallback) ───────────────────────────────
 
 def download_youtube_audio(url: str) -> str:
     """
     Download audio from a YouTube URL using yt-dlp.
-    Tries android → ios → web player clients to bypass 403 blocks.
+    Only called when running locally (not on Streamlit Cloud).
     """
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
     player_clients = ["android", "ios", "web"]
@@ -120,14 +154,14 @@ def download_youtube_audio(url: str) -> str:
                     .replace(".m4a", ".wav")
                     .replace(".opus", ".wav")
                 )
-            print(f"✅ Audio download succeeded using player client: {client}")
+            print(f"✅ Audio downloaded using player client: {client}")
             return filename
         except Exception as e:
             print(f"⚠️ Player client '{client}' failed: {e}. Trying next...")
             last_error = e
 
     raise RuntimeError(
-        f"All player clients failed to download the video. Last error: {last_error}"
+        f"All player clients failed to download the video.\nLast error: {last_error}"
     )
 
 
@@ -137,7 +171,7 @@ def convert_to_wav(input_path: str) -> str:
     """Convert any audio/video file to WAV format using pydub."""
     output_path = os.path.splitext(input_path)[0] + "_converted.wav"
     audio = AudioSegment.from_file(input_path)
-    audio = audio.set_channels(1).set_frame_rate(16000)  # 16kHz mono
+    audio = audio.set_channels(1).set_frame_rate(16000)
     audio.export(output_path, format="wav")
     return output_path
 
@@ -160,28 +194,36 @@ def process_input(source: str):
     """
     Process a YouTube URL or local file path.
 
+    For YouTube URLs:
+      - ALWAYS uses youtube-transcript-api (works from any IP, no download needed).
+      - On cloud: raises a clear error if captions are unavailable.
+      - On local: falls back to yt-dlp audio download + Whisper if captions unavailable.
+
     Returns:
-      - str:  pre-fetched transcript text (YouTube with captions) — skip Whisper
-      - list: audio chunk file paths (local files or YouTube without captions) — use Whisper
+      - str:  pre-fetched transcript text → caller skips Whisper
+      - list: audio chunk file paths → caller runs Whisper
     """
     source = source.strip().strip("'\"")
 
     if source.startswith("http://") or source.startswith("https://"):
         print("Detected YouTube URL.")
 
-        # Primary path: fetch transcript directly (fast, no 403 issues)
-        transcript_text = fetch_youtube_transcript(source)
-        if transcript_text:
-            return transcript_text  # ← returns str, caller skips Whisper
+        if IS_CLOUD:
+            # On cloud: only transcript API (yt-dlp will always fail from datacenter IPs)
+            return fetch_youtube_transcript(source)  # raises clear error if no captions
+        else:
+            # On local: try transcript API first, fall back to audio download
+            try:
+                return fetch_youtube_transcript(source)
+            except RuntimeError as e:
+                print(f"Transcript API failed locally: {e}\nFalling back to audio download...")
+                wav_path = download_youtube_audio(source)
+                chunks = chunk_audio(wav_path)
+                return chunks
 
-        # Fallback path: download audio + run Whisper
-        print("Falling back to audio download + Whisper transcription...")
-        wav_path = download_youtube_audio(source)
     else:
         print("Detected local file. Converting to WAV...")
         wav_path = convert_to_wav(source)
-
-    print("Chunking audio...")
-    chunks = chunk_audio(wav_path)
-    print(f"Audio ready — {len(chunks)} chunk(s) created.")
-    return chunks  # ← returns list, caller runs Whisper
+        chunks = chunk_audio(wav_path)
+        print(f"Audio ready — {len(chunks)} chunk(s) created.")
+        return chunks
