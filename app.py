@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 from dotenv import load_dotenv
-from utils.audio_processor import process_input
+from utils.audio_processor import process_input, process_uploaded_file
 from core.transcriber import transcribe_all
 from core.summarizer import summarize, generate_title
 from core.extractor import extract_action_items, extract_key_decisions, extract_questions
@@ -456,7 +456,29 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
-    source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=... or /path/to/file.mp4")
+
+    input_tab = st.radio(
+        "Input Mode",
+        ["🔗 YouTube URL", "📁 Upload File"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+    source = ""
+    uploaded_file = None
+
+    if input_tab == "🔗 YouTube URL":
+        source = st.text_input(
+            "YouTube URL",
+            placeholder="https://youtube.com/watch?v=...",
+            label_visibility="visible",
+        )
+    else:
+        uploaded_file = st.file_uploader(
+            "Upload video or audio file",
+            type=["mp4", "mp3", "wav", "m4a", "webm", "mkv", "ogg"],
+            label_visibility="visible",
+        )
 
     run_btn = st.button("⚡  Analyse", use_container_width=True)
 
@@ -480,8 +502,9 @@ st.markdown("---")
 
 # ── Run Pipeline ────────────────────────────────────────────────────────────────
 if run_btn:
-    if not source.strip():
-        st.error("Please enter a YouTube URL or file path.")
+    _no_input = (not source.strip()) and (uploaded_file is None)
+    if _no_input:
+        st.error("Please enter a YouTube URL or upload a video/audio file.")
     else:
         st.session_state.pipeline_done = False
         st.session_state.result = None
@@ -498,7 +521,10 @@ if run_btn:
                 st.info("⚙️ Pipeline running — see sidebar for live status…")
 
             update_step("audio", "active")
-            result = process_input(source)
+            if uploaded_file is not None:
+                result = process_uploaded_file(uploaded_file)
+            else:
+                result = process_input(source)
             update_step("audio", "done")
 
             update_step("transcript", "active")
