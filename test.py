@@ -9,9 +9,12 @@ from core.extractor import extract_action_items, extract_key_decisions, extract_
 
 source = "https://www.youtube.com/watch?v=_Q-e_nczWqM&t=223s"
 
-chunks = process_input(source)
+result = process_input(source)
 
-transcript = transcribe_all(chunks)
+if isinstance(result, str):
+    transcript = result
+else:
+    transcript = transcribe_all(result)
 print("\n" + "=" * 60)
 print("📝 TRANSCRIPT")
 print("=" * 60)

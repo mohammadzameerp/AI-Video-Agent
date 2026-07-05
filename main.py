@@ -11,9 +11,12 @@ load_dotenv()
 def run_pipeline(source :str) -> dict:
     print("starting AI Video Assistant")
 
-    chunks = process_input(source)
+    result = process_input(source)
 
-    transcript = transcribe_all(chunks)
+    if isinstance(result, str):
+        transcript = result  # YouTube captions fetched directly
+    else:
+        transcript = transcribe_all(result)  # Local file → Whisper
     print(f"raw transcription (first 300 characters ) {transcript[:300]}")
 
     title = generate_title(transcript)

@@ -498,11 +498,16 @@ if run_btn:
                 st.info("⚙️ Pipeline running — see sidebar for live status…")
 
             update_step("audio", "active")
-            chunks = process_input(source)
+            result = process_input(source)
             update_step("audio", "done")
 
             update_step("transcript", "active")
-            transcript = transcribe_all(chunks)
+            if isinstance(result, str):
+                # YouTube transcript fetched directly — no Whisper needed
+                transcript = result
+            else:
+                # Local file audio chunks — run Whisper
+                transcript = transcribe_all(result)
             update_step("transcript", "done")
 
             update_step("title", "active")
