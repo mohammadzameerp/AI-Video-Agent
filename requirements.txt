@@ -1,5 +1,5 @@
 # ── AI Video Assistant ── requirements.txt ────────────────────────────────────
-# Python >= 3.10 recommended
+# Python 3.11 required (see runtime.txt)
 
 # ── Audio / Video acquisition ─────────────────────────────────────────────────
 yt-dlp>=2024.4.9
@@ -7,6 +7,10 @@ pydub>=0.25.1
 ffmpeg-python>=0.2.0
 
 # ── Speech-to-Text (local Whisper) ────────────────────────────────────────────
+# Pin numba/llvmlite to Python 3.11-compatible versions explicitly
+# to prevent openai-whisper from pulling llvmlite==0.36.0 (Python <3.10 only)
+llvmlite>=0.39.0
+numba>=0.56.0
 openai-whisper>=20231117
 torch>=2.2.0
 torchaudio>=2.2.0
