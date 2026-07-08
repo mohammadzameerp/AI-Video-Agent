@@ -1,4 +1,4 @@
-# AI Video Agent
+# AI Video Assistant
 
 An intelligent web application that transcribes YouTube videos or local media files, generates professional summaries and metadata, and provides an interactive RAG (Retrieval-Augmented Generation) chat engine to answer questions about your meetings or presentations.
 
